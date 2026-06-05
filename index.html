@@ -1,0 +1,808 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<!-- 手機優先：禁止使用者縮放，確保版面穩定 -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#0f1115">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icons/icon-192.png">
+<title>簡易記帳</title>
+<style>
+  :root {
+    --bg: #000000;
+    --card: #0d0d0d;
+    --card2: #181818;
+    --line: #292929;
+    --txt: #ededed;
+    --sub: #8a8a8a;
+    --accent: #e6e6e6;     /* 強調＝淺灰白（無彩度） */
+    --acct: #b0b0b0;       /* 帳戶餘額欄中灰底（明顯但不刺眼） */
+    --high: #ffffff;       /* 偏高／警示＝最亮白 */
+    --muted2: #c4c4c4;     /* 次級淺灰 */
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body {
+    margin: 0;
+    font-family: -apple-system, "PingFang TC", "Noto Sans TC", "Helvetica Neue", sans-serif;
+    background: var(--bg);
+    color: var(--txt);
+    padding-bottom: 64px;
+    font-size: 12px;
+    -webkit-font-smoothing: antialiased;
+    color-scheme: dark;   /* 讓原生控件（日期選擇器等）走深色主題，圖示才看得見 */
+  }
+  header {
+    padding: 10px 12px 5px;
+    text-align: center;
+  }
+  header h1 { margin: 0; font-size: 14px; font-weight: 700; letter-spacing: .3px; }
+  header p { margin: 2px 0 0; font-size: 10px; color: var(--sub); }
+
+  .page { display: none; padding: 10px 10px 0; }
+  .page.active { display: block; animation: fade .18s ease; }
+  @keyframes fade { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: none; } }
+
+  .card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 10px;
+    margin-bottom: 8px;
+  }
+  .card h2 { margin: 0 0 7px; font-size: 11px; font-weight: 700; color: var(--accent); letter-spacing: .3px; }
+
+  label { display: block; font-size: 10.5px; color: var(--sub); margin: 8px 0 3px; }
+  label.acct-label { color: var(--txt); font-weight: 700; font-size: 11px; }
+  input[type="text"], input[type="number"], input[type="month"], select {
+    width: 100%;
+    padding: 7px 9px;
+    background: var(--card2);
+    border: 1px solid var(--line);
+    border-radius: 7px;
+    color: var(--txt);
+    font-size: 13.5px;
+    outline: none;
+  }
+  input:focus, select:focus { border-color: var(--accent); }
+  /* 月份選擇器的日曆圖示：靠 color-scheme:dark 自動變亮，這裡只調亮度與游標 */
+  input[type="month"]::-webkit-calendar-picker-indicator { opacity: .85; cursor: pointer; }
+  /* 帳戶餘額欄位：較亮的深灰底＋白字，在黑底中明顯，這是平常主要要填的 */
+  input.acct-input { background: #555555; border-color: #707070; color: var(--txt); font-weight: 600; }
+  input.acct-input::placeholder { color: var(--sub); }
+  input.acct-input:focus { border-color: var(--accent); }
+
+  button {
+    border: none;
+    border-radius: 7px;
+    padding: 8px;
+    font-size: 12.5px;
+    font-weight: 700;
+    color: #0a0a0a;
+    background: var(--accent);
+    width: 100%;
+    margin-top: 9px;
+    cursor: pointer;
+  }
+  button:active { opacity: .8; }
+  button:disabled { opacity: .3; cursor: default; }
+  button.ghost { background: var(--card2); border: 1px solid var(--line); color: var(--txt); font-weight: 600; }
+  button.danger { background: #2a2a2a; color: #d6d6d6; border: 1px solid var(--line); }
+  button.mini { width: auto; padding: 4px 8px; margin: 0; font-size: 10.5px; border-radius: 6px; }
+
+  .acct-row { display: flex; gap: 6px; align-items: center; margin-bottom: 6px; }
+  .acct-row input { flex: 1; }
+
+  .big-num { font-size: 18px; font-weight: 800; letter-spacing: .3px; }
+  .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+  .stat-box {
+    background: var(--card2);
+    border-radius: 8px;
+    padding: 8px;
+    text-align: center;
+  }
+  .stat-box .v { font-size: 14px; font-weight: 800; }
+  .stat-box .k { font-size: 9.5px; color: var(--sub); margin-top: 2px; }
+
+  .row-line { display: flex; justify-content: space-between; padding: 4px 0; font-size: 11.5px; }
+  .row-line .sub { color: var(--sub); }
+
+  table { width: 100%; border-collapse: collapse; font-size: 10.5px; }
+  th, td { padding: 6px 3px; text-align: right; border-bottom: 1px solid var(--line); }
+  th:first-child, td:first-child { text-align: left; }
+  th { color: var(--sub); font-weight: 600; }
+  td.spend { font-weight: 700; }
+  .pos { color: var(--muted2); }
+  .neg { color: var(--muted2); }
+  .warn { color: var(--high); font-weight: 700; }
+
+  .empty { text-align: center; color: var(--sub); padding: 20px 10px; font-size: 11.5px; }
+
+  /* 趨勢圖時間範圍切換 */
+  .seg { display: flex; gap: 6px; margin-bottom: 9px; }
+  .seg button {
+    flex: 1; width: auto; margin: 0; padding: 5px; font-size: 11px; font-weight: 600;
+    background: var(--card2); color: var(--sub); border: 1px solid var(--line); border-radius: 7px;
+  }
+  .seg button.on { background: var(--accent); color: #0a0a0a; border-color: var(--accent); }
+
+  nav {
+    position: fixed; bottom: 0; left: 0; right: 0;
+    background: rgba(0,0,0,.92);
+    backdrop-filter: blur(10px);
+    border-top: 1px solid var(--line);
+    display: flex;
+    padding: 4px 0 calc(4px + env(safe-area-inset-bottom));
+  }
+  nav button {
+    flex: 1; background: none; margin: 0; padding: 4px;
+    color: var(--sub); font-size: 9.5px; font-weight: 500;
+    display: flex; flex-direction: column; align-items: center; gap: 2px;
+  }
+  nav button .ic { font-size: 15.5px; }
+  nav button.on { color: var(--accent); }
+
+  .hint { font-size: 11px; color: var(--sub); line-height: 1.6; margin-top: 7px; }
+  .hint.alert { color: var(--high); }
+  .toast {
+    position: fixed; bottom: 84px; left: 50%; transform: translateX(-50%);
+    background: #ededed; color: #0a0a0a; padding: 9px 18px; border-radius: 18px;
+    font-size: 12.5px; font-weight: 600; opacity: 0; pointer-events: none; transition: opacity .25s; z-index: 99;
+  }
+  .toast.show { opacity: 1; }
+
+  /* 安裝引導列 */
+  #install-bar {
+    position: fixed; left: 11px; right: 11px; bottom: 60px;
+    background: var(--accent); color: #0a0a0a; border-radius: 10px;
+    padding: 10px 12px; display: none; align-items: center; gap: 9px;
+    box-shadow: 0 6px 20px rgba(0,0,0,.5); z-index: 90; font-size: 12.5px;
+  }
+  #install-bar.show { display: flex; }
+  #install-bar .x { margin-left: auto; opacity: .8; font-size: 16px; }
+</style>
+</head>
+<body>
+
+<!-- ============ 每月輸入 ============ -->
+<section class="page active" id="page-entry">
+  <div class="card">
+    <h2 style="display:flex;justify-content:space-between;align-items:center">
+      本月記錄
+      <button class="ghost mini" onclick="fillDefaults()">↻ 帶入設定值</button>
+    </h2>
+    <label>月份</label>
+    <input type="month" id="in-month">
+
+    <div id="balance-inputs"></div>
+
+    <label>本月薪資入帳</label>
+    <input type="number" id="in-salary" inputmode="numeric" placeholder="自動帶入設定值">
+
+    <label>定期定額扣款（買基金）</label>
+    <input type="number" id="in-fund" inputmode="numeric" placeholder="自動帶入設定值">
+
+    <label>本月額外買基金（沒有就留 0）</label>
+    <input type="number" id="in-extra" inputmode="numeric" placeholder="0">
+
+    <label>本月額外收入（獎金／退稅／別人還錢，沒有留 0）</label>
+    <input type="number" id="in-income" inputmode="numeric" placeholder="0">
+
+    <button onclick="saveRecord()">儲存本月記錄</button>
+  </div>
+
+  <div class="card" id="quick-stat"></div>
+</section>
+
+<!-- ============ 報表 ============ -->
+<section class="page" id="page-report">
+  <div class="card">
+    <h2>消費統計</h2>
+    <div class="stat-grid">
+      <div class="stat-box"><div class="v" id="st-avg">—</div><div class="k">月平均消費</div></div>
+      <div class="stat-box"><div class="v" id="st-median">—</div><div class="k">月消費中位數</div></div>
+      <div class="stat-box"><div class="v" id="st-max">—</div><div class="k">最高月消費</div></div>
+      <div class="stat-box"><div class="v" id="st-min">—</div><div class="k">最低月消費</div></div>
+    </div>
+    <div class="row-line" style="margin-top:10px;border-top:1px solid var(--line);padding-top:12px">
+      <span class="sub">累計投資（基金）</span><span id="st-invest" class="pos">—</span>
+    </div>
+    <div class="row-line"><span class="sub">總現金</span><span id="st-asset">—</span></div>
+  </div>
+
+  <div class="card">
+    <h2>每月消費趨勢</h2>
+    <div class="seg" id="trend-range">
+      <button data-r="half" class="on" onclick="setRange('half')">半年</button>
+      <button data-r="year" onclick="setRange('year')">一年</button>
+      <button data-r="all" onclick="setRange('all')">全部</button>
+    </div>
+    <div id="trend"></div>
+    <div class="hint">折線是每月消費走勢，<b>虛線</b>為平均；橘點＋⚠️ 代表該月高於平均的 <span id="ratio-note">1.2</span> 倍。</div>
+  </div>
+</section>
+
+<!-- ============ 明細 ============ -->
+<section class="page" id="page-detail">
+  <div class="card">
+    <h2>每月明細</h2>
+    <div id="table-wrap"></div>
+    <div class="hint">點「改」可回記錄頁修改該月資料。</div>
+  </div>
+</section>
+
+<!-- ============ 設定 ============ -->
+<section class="page" id="page-setting">
+  <div class="card">
+    <h2>每月固定項目（預設值）</h2>
+    <label>每月薪資入帳</label>
+    <input type="number" id="set-salary" inputmode="numeric" placeholder="例：60000">
+    <label>定期定額扣款（每月固定買基金）</label>
+    <input type="number" id="set-fund" inputmode="numeric" placeholder="例：10000">
+    <label>異常提醒門檻（消費超過月平均的幾倍就標 ⚠️）</label>
+    <input type="number" id="set-ratio" inputmode="decimal" step="0.1" placeholder="1.2">
+    <button onclick="saveSettings()">儲存設定</button>
+    <div class="hint">薪資與定期定額會在每月輸入時自動帶入，當月不同可再手動改。</div>
+  </div>
+
+  <div class="card">
+    <h2>我的帳戶</h2>
+    <div id="acct-list"></div>
+    <div class="acct-row" style="margin-top:6px">
+      <input type="text" id="new-acct" placeholder="新增帳戶名稱（例：台新、國泰、現金）">
+      <button class="mini" onclick="addAccount()">＋</button>
+    </div>
+    <div class="hint">每個月在「記錄」頁輸入各帳戶餘額，程式會自動加總並算出消費。</div>
+  </div>
+
+  <div class="card">
+    <h2>資料備份</h2>
+    <div class="hint" id="backup-status"></div>
+    <button class="ghost" onclick="exportData()">📤 匯出備份（下載 JSON）</button>
+    <button class="ghost" onclick="document.getElementById('import-file').click()">📥 匯入備份</button>
+    <input type="file" id="import-file" accept="application/json" style="display:none" onchange="importData(event)">
+    <button class="danger" onclick="clearAll()">🗑 清除所有資料</button>
+  </div>
+
+</section>
+
+<!-- ============ 底部導覽 ============ -->
+<nav>
+  <button class="on" data-page="entry" onclick="go('entry')"><span class="ic">📝</span>記錄</button>
+  <button data-page="detail" onclick="go('detail')"><span class="ic">📋</span>明細</button>
+  <button data-page="report" onclick="go('report')"><span class="ic">📊</span>報表</button>
+  <button data-page="setting" onclick="go('setting')"><span class="ic">⚙️</span>設定</button>
+</nav>
+
+<!-- 安裝引導列 -->
+<div id="install-bar">
+  <span>📲 把「簡易記帳」加到主畫面，用起來像 App</span>
+  <span class="x" onclick="hideInstall()">✕</span>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ============================================================
+   資料儲存：localStorage
+   data = {
+     settings: { salary, fund, accounts:[名稱], alertRatio, lastBackup },
+     records: { "2026-06": { balances:{帳戶:金額}, salary, fund, extra, income }, ... }
+   }
+   ============================================================ */
+const KEY = 'simple-ledger-v1';
+let data = load();
+let trendRange = 'half';  // 趨勢圖顯示範圍：half=半年(預設) / year=一年 / all=全部
+
+function load() {
+  try {
+    const raw = localStorage.getItem(KEY);
+    if (raw) {
+      const obj = JSON.parse(raw);
+      // 補上後加欄位的預設值，避免舊資料缺欄
+      if (obj.settings.alertRatio == null) obj.settings.alertRatio = 1.2;
+      if (obj.settings.lastBackup === undefined) obj.settings.lastBackup = null;
+      return obj;
+    }
+  } catch (e) {}
+  return { settings: { salary: 0, fund: 0, accounts: [], alertRatio: 1.2, lastBackup: null }, records: {} };
+}
+function save() { localStorage.setItem(KEY, JSON.stringify(data)); }
+
+function fmt(n) {
+  if (n === null || n === undefined || isNaN(n)) return '—';
+  return 'NT$ ' + Math.round(n).toLocaleString('en-US');
+}
+function toast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 1600);
+}
+
+/* ---------- 分頁切換 ---------- */
+function go(page) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.getElementById('page-' + page).classList.add('active');
+  document.querySelectorAll('nav button').forEach(b => b.classList.toggle('on', b.dataset.page === page));
+  if (page === 'report') renderReport();
+  if (page === 'detail') renderDetail();
+  if (page === 'entry') renderEntry();
+  if (page === 'setting') renderSetting();
+  window.scrollTo(0, 0);
+}
+
+/* ---------- 設定頁 ---------- */
+function renderSetting() {
+  document.getElementById('set-salary').value = data.settings.salary || '';
+  document.getElementById('set-fund').value = data.settings.fund || '';
+  document.getElementById('set-ratio').value = data.settings.alertRatio || 1.2;
+  renderAcctList();
+  renderBackupStatus();
+}
+function saveSettings() {
+  data.settings.salary = +document.getElementById('set-salary').value || 0;
+  data.settings.fund = +document.getElementById('set-fund').value || 0;
+  let r = parseFloat(document.getElementById('set-ratio').value);
+  if (isNaN(r) || r <= 0) r = 1.2;
+  data.settings.alertRatio = r;
+  save(); toast('設定已儲存');
+}
+function renderAcctList() {
+  const box = document.getElementById('acct-list');
+  box.innerHTML = '';
+  if (data.settings.accounts.length === 0) {
+    box.innerHTML = '<div class="hint">尚未新增帳戶，先在下方加一個。</div>';
+  }
+  const last = data.settings.accounts.length - 1;
+  data.settings.accounts.forEach((name, i) => {
+    const row = document.createElement('div');
+    row.className = 'acct-row';
+    row.innerHTML = `<input type="text" value="${name.replace(/"/g,'&quot;')}" onchange="renameAccount(${i}, this.value)">
+      <button class="mini" onclick="moveAccount(${i},-1)" ${i === 0 ? 'disabled' : ''}>↑</button>
+      <button class="mini" onclick="moveAccount(${i},1)" ${i === last ? 'disabled' : ''}>↓</button>
+      <button class="mini danger" onclick="delAccount(${i})">刪</button>`;
+    box.appendChild(row);
+  });
+}
+// 調整帳戶順序（dir=-1 上移、+1 下移）；記錄頁欄位會跟著重排
+function moveAccount(i, dir) {
+  const j = i + dir, a = data.settings.accounts;
+  if (j < 0 || j >= a.length) return;
+  [a[i], a[j]] = [a[j], a[i]];
+  save(); renderAcctList();
+}
+function addAccount() {
+  const inp = document.getElementById('new-acct');
+  const name = inp.value.trim();
+  if (!name) return;
+  if (data.settings.accounts.includes(name)) { toast('帳戶已存在'); return; }
+  data.settings.accounts.push(name);
+  inp.value = '';
+  save(); renderAcctList(); toast('已新增帳戶');
+}
+function renameAccount(i, val) {
+  val = val.trim(); if (!val) return;
+  const old = data.settings.accounts[i];
+  data.settings.accounts[i] = val;
+  // 同步更新所有記錄裡的帳戶名稱
+  Object.values(data.records).forEach(r => {
+    if (r.balances && old in r.balances) { r.balances[val] = r.balances[old]; delete r.balances[old]; }
+  });
+  save();
+}
+function delAccount(i) {
+  if (!confirm('確定刪除帳戶「' + data.settings.accounts[i] + '」？已輸入的餘額也會一併移除。')) return;
+  const name = data.settings.accounts[i];
+  data.settings.accounts.splice(i, 1);
+  Object.values(data.records).forEach(r => { if (r.balances) delete r.balances[name]; });
+  save(); renderAcctList(); toast('已刪除');
+}
+
+/* ---------- 每月輸入頁 ---------- */
+function currentMonthStr() {
+  const d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+}
+function renderEntry() {
+  const mEl = document.getElementById('in-month');
+  if (!mEl.value) mEl.value = currentMonthStr();
+  buildBalanceInputs();
+  loadMonthIntoForm();
+  updatePreview();
+}
+function buildBalanceInputs() {
+  const box = document.getElementById('balance-inputs');
+  box.innerHTML = '';
+  if (data.settings.accounts.length === 0) {
+    box.innerHTML = '<div class="hint">⚠️ 還沒有帳戶，請先到「設定」新增帳戶。</div>';
+    return;
+  }
+  data.settings.accounts.forEach(name => {
+    const lab = document.createElement('label');
+    lab.className = 'acct-label';
+    lab.textContent = name + ' 餘額';
+    const inp = document.createElement('input');
+    inp.type = 'number'; inp.inputMode = 'numeric';
+    inp.className = 'acct-input';  // 帳戶餘額欄變色凸顯
+    inp.dataset.acct = name; inp.placeholder = '0';
+    inp.oninput = updatePreview;
+    box.appendChild(lab); box.appendChild(inp);
+  });
+}
+// 一鍵把設定頁的薪資與定期定額填入當月欄位
+function fillDefaults() {
+  document.getElementById('in-salary').value = data.settings.salary || 0;
+  document.getElementById('in-fund').value = data.settings.fund || 0;
+  toast('已帶入設定值');
+}
+function loadMonthIntoForm() {
+  const m = document.getElementById('in-month').value;
+  const r = data.records[m];
+  // 餘額
+  document.querySelectorAll('#balance-inputs input').forEach(inp => {
+    inp.value = (r && r.balances && r.balances[inp.dataset.acct] != null) ? r.balances[inp.dataset.acct] : '';
+  });
+  // 薪資 / 基金：有記錄用記錄值，否則帶設定預設
+  document.getElementById('in-salary').value = r ? r.salary : (data.settings.salary || '');
+  document.getElementById('in-fund').value = r ? r.fund : (data.settings.fund || '');
+  document.getElementById('in-extra').value = r ? (r.extra || 0) : 0;
+  document.getElementById('in-income').value = r ? (r.income || 0) : 0;
+}
+document.getElementById('in-month').addEventListener('change', () => { loadMonthIntoForm(); updatePreview(); });
+['in-salary','in-fund','in-extra','in-income'].forEach(id =>
+  document.getElementById(id).addEventListener('input', updatePreview));
+
+function readForm() {
+  const m = document.getElementById('in-month').value;
+  const balances = {};
+  document.querySelectorAll('#balance-inputs input').forEach(inp => {
+    balances[inp.dataset.acct] = +inp.value || 0;
+  });
+  return {
+    month: m,
+    balances,
+    salary: +document.getElementById('in-salary').value || 0,
+    fund: +document.getElementById('in-fund').value || 0,
+    extra: +document.getElementById('in-extra').value || 0,
+    income: +document.getElementById('in-income').value || 0
+  };
+}
+function totalOf(rec) {
+  return Object.values(rec.balances || {}).reduce((a, b) => a + (+b || 0), 0);
+}
+// 取得某月「上一個有記錄」的月份
+function prevMonthKey(month) {
+  const keys = Object.keys(data.records).filter(k => k < month).sort();
+  return keys.length ? keys[keys.length - 1] : null;
+}
+// 計算某月消費（需有上月資料）
+function calcSpend(month, recOverride) {
+  const rec = recOverride || data.records[month];
+  if (!rec) return null;
+  const pk = prevMonthKey(month);
+  if (!pk) return null; // 基準月
+  const prevTotal = totalOf(data.records[pk]);
+  const currTotal = totalOf(rec);
+  return prevTotal + rec.salary + (rec.income || 0) - (rec.fund + rec.extra) - currTotal;
+}
+// 判斷某筆消費是否「偏高」（高於平均 × 門檻）。需傳入目前平均。
+function isHigh(spend, avgSpend) {
+  return spend !== null && avgSpend > 0 && spend > avgSpend * data.settings.alertRatio;
+}
+// 即時預覽已移除；保留空函式讓既有呼叫點不報錯
+function updatePreview() {}
+function saveRecord() {
+  const f = readForm();
+  if (!f.month) { toast('請選擇月份'); return; }
+  if (data.settings.accounts.length === 0) { toast('請先到設定新增帳戶'); return; }
+  data.records[f.month] = { balances: f.balances, salary: f.salary, fund: f.fund, extra: f.extra, income: f.income };
+  save();
+  toast('已儲存 ' + f.month);
+  updatePreview();
+  renderQuickStat();
+}
+function renderQuickStat() {
+  const box = document.getElementById('quick-stat');
+  const months = sortedMonths();
+  if (months.length === 0) {
+    box.innerHTML = '<div class="empty">輸入帳戶餘額後，這裡會顯示你的概況。</div>';
+    return;
+  }
+  // 總現金＝最新月份各帳戶餘額加總
+  const latest = months[months.length - 1];  // 月份字串最大者＝最近期月份（與輸入先後無關）
+  const cash = totalOf(data.records[latest]);
+  const spends = allSpends();
+  const vals = spends.map(x => x.spend);
+  const a = vals.length ? avg(vals) : 0;
+  // 最近期月份的消費
+  const latestSpend = calcSpend(latest);
+  const latestHi = isHigh(latestSpend, a);
+  const latestTxt = latestSpend === null ? '<span class="sub">基準月</span>' : ((latestHi ? '⚠️ ' : '') + fmt(latestSpend));
+  let html = `<h2>快速概況</h2>
+    <div class="row-line"><span class="sub">總現金</span><span class="big-num" style="font-size:18px">${fmt(cash)}</span></div>
+    <div class="row-line"><span class="sub">最近月消費（${latest.slice(5)}月）</span><span class="${latestHi ? 'warn' : ''}">${latestTxt}</span></div>
+    <div class="row-line"><span class="sub">已記錄月份</span><span>${months.length} 個月</span></div>`;
+  if (spends.length) {
+    html += `<div class="row-line"><span class="sub">月平均消費</span><span>${fmt(avg(vals))}</span></div>
+    <div class="row-line"><span class="sub">月消費中位數</span><span>${fmt(median(vals))}</span></div>`;
+  } else {
+    html += `<div class="hint">再記錄下一個月，就能算出消費與趨勢。</div>`;
+  }
+  box.innerHTML = html;
+}
+
+/* ---------- 統計計算 ---------- */
+function sortedMonths() { return Object.keys(data.records).sort(); }
+function allSpends() {
+  // 回傳 [{month, spend}]，只含可算出消費的月份
+  return sortedMonths().map(m => ({ month: m, spend: calcSpend(m) }))
+                       .filter(x => x.spend !== null);
+}
+function avg(arr) {
+  if (!arr.length) return 0;
+  return arr.reduce((a, b) => a + b, 0) / arr.length;
+}
+function median(arr) {
+  const v = arr.slice().sort((a, b) => a - b);
+  const n = v.length, mid = Math.floor(n / 2);
+  return n % 2 ? v[mid] : (v[mid - 1] + v[mid]) / 2;
+}
+
+/* ---------- 報表頁 ---------- */
+function renderReport() {
+  document.getElementById('ratio-note').textContent = data.settings.alertRatio;
+  const spends = allSpends();
+  const vals = spends.map(x => x.spend);
+  if (spends.length === 0) {
+    ['st-avg','st-median','st-max','st-min'].forEach(id => document.getElementById(id).textContent = '—');
+  } else {
+    document.getElementById('st-avg').textContent = fmt(avg(vals));
+    document.getElementById('st-median').textContent = fmt(median(vals));
+    document.getElementById('st-max').textContent = fmt(Math.max(...vals));
+    document.getElementById('st-min').textContent = fmt(Math.min(...vals));
+  }
+  // 累計投資 = 所有月份的 定期定額 + 額外
+  const invest = Object.values(data.records).reduce((a, r) => a + (r.fund || 0) + (r.extra || 0), 0);
+  document.getElementById('st-invest').textContent = fmt(invest);
+  // 目前總資產 = 最新月份總餘額
+  const months = sortedMonths();
+  document.getElementById('st-asset').textContent = months.length ? fmt(totalOf(data.records[months[months.length - 1]])) : '—';
+
+  renderTrend();
+}
+// "YYYY-MM" 轉成連續月份序號，方便算範圍
+function monthIndex(m) { const [y, mo] = m.split('-').map(Number); return y * 12 + (mo - 1); }
+// 序號轉回 "YYYY-MM"
+function indexToMonth(idx) { const y = Math.floor(idx / 12), mo = idx % 12 + 1; return y + '-' + String(mo).padStart(2, '0'); }
+// 切換趨勢圖時間範圍
+function setRange(r) {
+  trendRange = r;
+  document.querySelectorAll('#trend-range button').forEach(b => b.classList.toggle('on', b.dataset.r === r));
+  renderTrend();
+}
+// 明細頁：自行計算後渲染表格
+function renderDetail() {
+  const vals = allSpends().map(x => x.spend);
+  renderTable(vals);
+}
+// 以 SVG 畫折線趨勢圖（連續時間軸：沒記錄的月份也佔一格、折線在缺口斷開）
+function renderTrend() {
+  const box = document.getElementById('trend');
+  const recMonths = sortedMonths();
+  if (recMonths.length === 0) { box.innerHTML = '<div class="empty">尚無資料</div>'; return; }
+  // 決定顯示的連續月份範圍（以系統當月或最近記錄較晚者為終點，往回算）
+  const curIdx = Math.max(monthIndex(currentMonthStr()), monthIndex(recMonths[recMonths.length - 1]));
+  let startIdx, endIdx = curIdx;
+  if (trendRange === 'all') {
+    startIdx = monthIndex(recMonths[0]);
+  } else {
+    const span = trendRange === 'year' ? 12 : 6;
+    startIdx = endIdx - (span - 1);
+  }
+  // 連續月份序列，每月算消費（沒記錄或基準月為 null）
+  const pts = [];
+  for (let i = startIdx; i <= endIdx; i++) {
+    const m = indexToMonth(i);
+    pts.push({ month: m, spend: data.records[m] ? calcSpend(m) : null });
+  }
+  const vals = pts.filter(p => p.spend !== null).map(p => p.spend);
+  if (vals.length === 0) { box.innerHTML = '<div class="empty">此範圍內尚無可顯示的消費資料</div>'; return; }
+  const a = avg(vals);
+
+  // 畫布尺寸
+  const W = 340, H = 156, pl = 54, pr = 12, pt = 22, pb = 22;
+  const plotW = W - pl - pr, plotH = H - pt - pb;
+  const n = pts.length;
+  let yMin = Math.min(0, ...vals), yMax = Math.max(...vals, 1);
+  if (yMax === yMin) yMax = yMin + 1;
+  const X = i => n === 1 ? pl + plotW / 2 : pl + i / (n - 1) * plotW;
+  const Y = v => pt + (1 - (v - yMin) / (yMax - yMin)) * plotH;
+  const shortK = v => Math.round(v).toLocaleString('en-US');
+
+  // 水平參考線
+  let grid = '', lastLabelY = -999;
+  [['最高', yMax], ['平均', a], ['最低', yMin]].forEach(([lab, v]) => {
+    const gy = Y(v);
+    const dash = lab === '平均' ? 'stroke-dasharray="4 3"' : '';
+    const col = lab === '平均' ? '#777777' : '#2a2a2a';
+    grid += `<line x1="${pl}" y1="${gy}" x2="${W - pr}" y2="${gy}" stroke="${col}" stroke-width="1" ${dash}/>`;
+    if (Math.abs(gy - lastLabelY) >= 11) {
+      grid += `<text x="${pl - 5}" y="${gy + 3}" font-size="8.5" text-anchor="end" fill="#9aa0aa">${shortK(v)}</text>`;
+      lastLabelY = gy;
+    }
+  });
+
+  // 折線：只連「相鄰且都有值」的點，缺口（沒資料的月）自動斷開
+  let segs = '', prev = -1;
+  pts.forEach((p, i) => {
+    if (p.spend !== null) {
+      if (prev !== -1) {
+        segs += `<line x1="${X(prev).toFixed(1)}" y1="${Y(pts[prev].spend).toFixed(1)}" x2="${X(i).toFixed(1)}" y2="${Y(p.spend).toFixed(1)}" stroke="#dadada" stroke-width="2" stroke-linecap="round"/>`;
+      }
+      prev = i;
+    } else {
+      prev = -1;
+    }
+  });
+
+  // 資料點 + ⚠️ + 月份標籤（12 個月以內全部顯示，更多才抽稀避免擠）
+  const step = n <= 12 ? 1 : Math.ceil(n / 8);
+  let dots = '', marks = '', xlabels = '';
+  pts.forEach((p, i) => {
+    const cx = X(i);
+    if (p.spend !== null) {
+      const hi = isHigh(p.spend, a);
+      const cy = Y(p.spend);
+      dots += `<circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="${hi ? 5 : 3.2}" fill="${hi ? '#ffffff' : '#cfcfcf'}" stroke="#000000" stroke-width="1.2"/>`;
+      dots += `<circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="12" fill="transparent" style="cursor:pointer" onclick="trendTip('${p.month}',${p.spend})"/>`;
+      if (hi) marks += `<text x="${cx.toFixed(1)}" y="${Math.max(cy - 8, 9).toFixed(1)}" font-size="11" text-anchor="middle">⚠️</text>`;
+    }
+    if (i % step === 0 || i === n - 1) {
+      xlabels += `<text x="${cx.toFixed(1)}" y="${H - 6}" font-size="7.5" text-anchor="middle" fill="#9aa0aa">${p.month.slice(5)}月</text>`;
+    }
+  });
+
+  box.innerHTML = `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block" xmlns="http://www.w3.org/2000/svg">
+    ${grid}${segs}${dots}${marks}${xlabels}
+  </svg>`;
+}
+// 點擊折線資料點：浮動顯示該月消費
+function trendTip(m, s) { toast(m.slice(5) + '月消費 ' + fmt(s)); }
+function renderTable(vals) {
+  const box = document.getElementById('table-wrap');
+  const months = sortedMonths();
+  if (months.length === 0) { box.innerHTML = '<div class="empty">還沒有任何記錄</div>'; return; }
+  const a = avg(vals);
+  let rows = months.map(m => {
+    const r = data.records[m];
+    const spend = calcSpend(m);
+    const hi = isHigh(spend, a);
+    const spendTxt = spend === null ? '<span class="sub">基準月</span>' : ((hi ? '⚠️ ' : '') + fmt(spend));
+    const cls = spend === null ? '' : (spend < 0 ? 'pos' : (hi ? 'warn' : ''));
+    return `<tr>
+      <td>${m}</td>
+      <td>${fmt(totalOf(r))}</td>
+      <td>${(r.extra||0) ? fmt(r.extra) : '—'}</td>
+      <td>${(r.income||0) ? fmt(r.income) : '—'}</td>
+      <td class="spend ${cls}">${spendTxt}</td>
+      <td><div style="display:flex;gap:6px;justify-content:flex-end">
+        <button class="mini" onclick="editRecord('${m}')">改</button>
+        <button class="mini danger" onclick="delRecord('${m}')">刪</button>
+      </div></td>
+    </tr>`;
+  }).reverse().join('');
+  box.innerHTML = `<table>
+    <tr><th>月份</th><th>總餘額</th><th>加碼</th><th>額外收入</th><th>消費</th><th></th></tr>
+    ${rows}</table>`;
+}
+function delRecord(m) {
+  if (!confirm('刪除 ' + m + ' 的記錄？')) return;
+  delete data.records[m];
+  save(); renderDetail(); toast('已刪除 ' + m);
+}
+// 從明細跳回記錄頁編輯某月（載入該月已存的資料）
+function editRecord(m) {
+  go('entry');
+  document.getElementById('in-month').value = m;
+  loadMonthIntoForm();
+  updatePreview();
+  window.scrollTo(0, 0);
+  toast('編輯 ' + m);
+}
+
+/* ---------- 備份 ---------- */
+function monthDiff(a, b) {
+  // 回傳 b - a 的月份差（字串 "YYYY-MM"）
+  const [ay, am] = a.split('-').map(Number);
+  const [by, bm] = b.split('-').map(Number);
+  return (by * 12 + bm) - (ay * 12 + am);
+}
+function renderBackupStatus() {
+  const el = document.getElementById('backup-status');
+  const lb = data.settings.lastBackup;
+  if (!lb) {
+    el.className = 'hint';
+    el.textContent = '尚未備份過。手機瀏覽器資料可能被清除，建議定期匯出存檔。';
+  } else {
+    el.className = 'hint';
+    el.textContent = '上次備份：' + lb;
+  }
+}
+function exportData() {
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = '記帳備份_' + currentMonthStr() + '.json';
+  a.click();
+  URL.revokeObjectURL(url);
+  data.settings.lastBackup = currentMonthStr();
+  save();
+  renderBackupStatus();
+  toast('已匯出備份');
+}
+function importData(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const obj = JSON.parse(reader.result);
+      if (!obj.settings || !obj.records) throw new Error('格式錯誤');
+      if (!confirm('匯入後會覆蓋目前資料，確定？')) return;
+      data = obj;
+      if (data.settings.alertRatio == null) data.settings.alertRatio = 1.2;
+      if (data.settings.lastBackup === undefined) data.settings.lastBackup = null;
+      save();
+      renderSetting(); toast('匯入成功');
+    } catch (err) { alert('匯入失敗：' + err.message); }
+  };
+  reader.readAsText(file);
+  e.target.value = '';
+}
+function clearAll() {
+  if (!confirm('確定清除所有設定與記錄？此動作無法復原（建議先匯出備份）。')) return;
+  localStorage.removeItem(KEY);
+  data = load();
+  renderSetting(); toast('已清除');
+}
+// 開啟時檢查：有資料、且距上次備份超過 2 個月（或從未備份）就溫和提醒一次
+function checkBackupReminder() {
+  if (Object.keys(data.records).length === 0) return;
+  const lb = data.settings.lastBackup;
+  const overdue = !lb || monthDiff(lb, currentMonthStr()) >= 2;
+  if (overdue) {
+    setTimeout(() => toast('📦 提醒：記得到設定頁匯出備份'), 800);
+  }
+}
+
+/* ---------- PWA：Service Worker 與安裝引導 ---------- */
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch(() => {/* 本機 file:// 開啟會失敗，忽略 */});
+  });
+}
+let deferredPrompt = null;
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  deferredPrompt = e;
+  document.getElementById('install-bar').classList.add('show');
+});
+document.getElementById('install-bar').addEventListener('click', async (e) => {
+  if (e.target.classList.contains('x')) return;
+  if (!deferredPrompt) return;
+  deferredPrompt.prompt();
+  await deferredPrompt.userChoice;
+  deferredPrompt = null;
+  hideInstall();
+});
+function hideInstall() { document.getElementById('install-bar').classList.remove('show'); }
+window.addEventListener('appinstalled', hideInstall);
+
+/* ---------- 啟動 ---------- */
+renderEntry();
+renderQuickStat();
+</script>
+</body>
+</html>

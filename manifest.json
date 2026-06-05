@@ -1,6 +1,6 @@
 {
-  "name": "簡易記帳",
-  "short_name": "記帳",
+  "name": "明暄記帳",
+  "short_name": "明暄記帳",
   "description": "每月輸入帳戶餘額，自動推算消費、看趨勢",
   "start_url": "./index.html",
   "scope": "./",

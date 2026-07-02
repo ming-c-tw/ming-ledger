@@ -206,7 +206,7 @@
       <div class="stat-box"><div class="v" id="st-min">—</div><div class="k">最低月消費</div></div>
     </div>
     <div class="row-line" style="margin-top:10px;border-top:1px solid var(--line);padding-top:12px">
-      <span class="sub">累計投資（基金）</span><span id="st-invest" class="pos">—</span>
+      <span class="sub">基金投入本金</span><span id="st-invest" class="pos">—</span>
     </div>
     <div class="row-line"><span class="sub">總現金</span><span id="st-asset">—</span></div>
   </div>
@@ -240,6 +240,8 @@
     <input type="number" id="set-salary" inputmode="numeric" placeholder="例：60000">
     <label>定期定額扣款（每月固定買基金）</label>
     <input type="number" id="set-fund" inputmode="numeric" placeholder="例：10000">
+    <label>已投入基金本金（開始記帳前已經買的；之後定期定額＋加碼會自動累加）</label>
+    <input type="number" id="set-fundbase" inputmode="numeric" placeholder="例：500000（沒有留 0）">
     <label>異常提醒門檻（消費超過月平均的幾倍就標 ⚠️）</label>
     <input type="number" id="set-ratio" inputmode="decimal" step="0.1" placeholder="1.2">
     <button onclick="saveSettings()">儲存設定</button>
@@ -303,10 +305,11 @@ function load() {
       // 補上後加欄位的預設值，避免舊資料缺欄
       if (obj.settings.alertRatio == null) obj.settings.alertRatio = 1.2;
       if (obj.settings.lastBackup === undefined) obj.settings.lastBackup = null;
+      if (obj.settings.fundBase == null) obj.settings.fundBase = 0;
       return obj;
     }
   } catch (e) {}
-  return { settings: { salary: 0, fund: 0, accounts: [], alertRatio: 1.2, lastBackup: null }, records: {} };
+  return { settings: { salary: 0, fund: 0, accounts: [], alertRatio: 1.2, lastBackup: null, fundBase: 0 }, records: {} };
 }
 function save() { localStorage.setItem(KEY, JSON.stringify(data)); }
 
@@ -336,6 +339,7 @@ function go(page) {
 function renderSetting() {
   document.getElementById('set-salary').value = data.settings.salary || '';
   document.getElementById('set-fund').value = data.settings.fund || '';
+  document.getElementById('set-fundbase').value = data.settings.fundBase || '';
   document.getElementById('set-ratio').value = data.settings.alertRatio || 1.2;
   renderAcctList();
   renderBackupStatus();
@@ -343,6 +347,7 @@ function renderSetting() {
 function saveSettings() {
   data.settings.salary = +document.getElementById('set-salary').value || 0;
   data.settings.fund = +document.getElementById('set-fund').value || 0;
+  data.settings.fundBase = +document.getElementById('set-fundbase').value || 0;
   let r = parseFloat(document.getElementById('set-ratio').value);
   if (isNaN(r) || r <= 0) r = 1.2;
   data.settings.alertRatio = r;
@@ -562,8 +567,9 @@ function renderReport() {
     document.getElementById('st-max').textContent = fmt(Math.max(...vals));
     document.getElementById('st-min').textContent = fmt(Math.min(...vals));
   }
-  // 累計投資 = 所有月份的 定期定額 + 額外
-  const invest = Object.values(data.records).reduce((a, r) => a + (r.fund || 0) + (r.extra || 0), 0);
+  // 基金投入本金 = 已投入本金 + 所有月份的（定期定額 + 加碼）
+  const added = Object.values(data.records).reduce((a, r) => a + (r.fund || 0) + (r.extra || 0), 0);
+  const invest = (data.settings.fundBase || 0) + added;
   document.getElementById('st-invest').textContent = fmt(invest);
   // 目前總資產 = 最新月份總餘額
   const months = sortedMonths();
@@ -754,6 +760,7 @@ function importData(e) {
       data = obj;
       if (data.settings.alertRatio == null) data.settings.alertRatio = 1.2;
       if (data.settings.lastBackup === undefined) data.settings.lastBackup = null;
+      if (data.settings.fundBase == null) data.settings.fundBase = 0;
       save();
       renderSetting(); toast('匯入成功');
     } catch (err) { alert('匯入失敗：' + err.message); }

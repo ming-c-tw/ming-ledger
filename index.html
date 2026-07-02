@@ -245,7 +245,6 @@
     <label>消費偏高提醒門檻（倍數）</label>
     <input type="number" id="set-ratio" inputmode="decimal" step="0.1" placeholder="1.2">
     <button onclick="saveSettings()">儲存設定</button>
-    <div class="hint">薪資與定期定額會在每月輸入時自動帶入，當月不同可再手動改。</div>
   </div>
 
   <div class="card">
@@ -255,7 +254,6 @@
       <input type="text" id="new-acct" placeholder="新增帳戶名稱（例：台新、國泰、現金）">
       <button class="mini" onclick="addAccount()">＋</button>
     </div>
-    <div class="hint">每個月在「記錄」頁輸入各帳戶餘額，程式會自動加總並算出消費。</div>
   </div>
 
   <div class="card">
@@ -726,14 +724,8 @@ function monthDiff(a, b) {
 }
 function renderBackupStatus() {
   const el = document.getElementById('backup-status');
-  const lb = data.settings.lastBackup;
-  if (!lb) {
-    el.className = 'hint';
-    el.textContent = '尚未備份過。手機瀏覽器資料可能被清除，建議定期匯出存檔。';
-  } else {
-    el.className = 'hint';
-    el.textContent = '上次備份：' + lb;
-  }
+  el.className = 'hint';
+  el.textContent = data.settings.lastBackup ? '上次備份：' + data.settings.lastBackup : '';
 }
 function exportData() {
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });

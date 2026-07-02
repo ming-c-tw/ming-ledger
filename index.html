@@ -180,13 +180,13 @@
     <label>本月薪資入帳</label>
     <input type="number" id="in-salary" inputmode="numeric" placeholder="自動帶入設定值">
 
-    <label>定期定額扣款（買基金）</label>
+    <label>定期定額扣款</label>
     <input type="number" id="in-fund" inputmode="numeric" placeholder="自動帶入設定值">
 
-    <label>本月額外買基金（沒有就留 0）</label>
+    <label>本月額外買基金</label>
     <input type="number" id="in-extra" inputmode="numeric" placeholder="0">
 
-    <label>本月額外收入（獎金／退稅／別人還錢，沒有留 0）</label>
+    <label>本月額外收入</label>
     <input type="number" id="in-income" inputmode="numeric" placeholder="0">
 
     <button onclick="saveRecord()">儲存本月記錄</button>
@@ -238,11 +238,11 @@
     <h2>每月固定項目（預設值）</h2>
     <label>每月薪資入帳</label>
     <input type="number" id="set-salary" inputmode="numeric" placeholder="例：60000">
-    <label>定期定額扣款（每月固定買基金）</label>
+    <label>定期定額扣款</label>
     <input type="number" id="set-fund" inputmode="numeric" placeholder="例：10000">
-    <label>已投入基金本金（開始記帳前已經買的；之後定期定額＋加碼會自動累加）</label>
-    <input type="number" id="set-fundbase" inputmode="numeric" placeholder="例：500000（沒有留 0）">
-    <label>異常提醒門檻（消費超過月平均的幾倍就標 ⚠️）</label>
+    <label>記帳前已投入基金本金</label>
+    <input type="number" id="set-fundbase" inputmode="numeric" placeholder="例：500000">
+    <label>消費偏高提醒門檻（倍數）</label>
     <input type="number" id="set-ratio" inputmode="decimal" step="0.1" placeholder="1.2">
     <button onclick="saveSettings()">儲存設定</button>
     <div class="hint">薪資與定期定額會在每月輸入時自動帶入，當月不同可再手動改。</div>

@@ -1,5 +1,5 @@
-/* 簡易記帳 Service Worker：快取優先，離線可用 */
-const CACHE = 'ledger-v1';
+/* 明暄記帳 Service Worker：網路優先，確保開啟時拿到最新版；離線時退回快取 */
+const CACHE = 'ledger-v2';
 const ASSETS = [
   './',
   './index.html',
@@ -8,28 +8,31 @@ const ASSETS = [
   './icons/icon-512.png'
 ];
 
-// 安裝：預先快取所有資源
+// 安裝：預先快取所有資源，並立即接手（不等舊 SW 結束）
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS)));
   self.skipWaiting();
 });
 
-// 啟用：清掉舊版快取
+// 啟用：清掉舊版快取，立即控制所有頁面
 self.addEventListener('activate', (e) => {
   e.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)))
-    )
+    caches.keys()
+      .then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
+      .then(() => self.clients.claim())
   );
-  self.clients.claim();
 });
 
-// 取用：快取優先，找不到再連網，網路也失敗時退回首頁
+// 取用：網路優先——先抓最新並順手更新快取；離線（fetch 失敗）才用快取，最後退回首頁
 self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET') return;
   e.respondWith(
-    caches.match(e.request).then((hit) =>
-      hit || fetch(e.request).catch(() => caches.match('./index.html'))
-    )
+    fetch(e.request)
+      .then((res) => {
+        const copy = res.clone();
+        caches.open(CACHE).then((c) => c.put(e.request, copy));
+        return res;
+      })
+      .catch(() => caches.match(e.request).then((hit) => hit || caches.match('./index.html')))
   );
 });
